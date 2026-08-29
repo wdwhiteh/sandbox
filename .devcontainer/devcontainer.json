@@ -1,0 +1,66 @@
+{
+  "name": "claude-dev",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+
+  // The python feature is deliberately absent: it would install a second Python
+  // 3.14 at /usr/local/python/current, put it ahead of the venv on PATH, and
+  // shadow the interpreter that actually has PyTorch in it.
+  "features": {
+    "ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {}
+  },
+
+  // "optional" attaches all GPUs when the host has the NVIDIA Container Toolkit
+  // and still starts the container when it does not. A hard `--gpus all` in
+  // runArgs would make the container unstartable on CPU-only machines.
+  "hostRequirements": {
+    "gpu": "optional"
+  },
+
+  // Docker's 64MB default /dev/shm is too small for DataLoader worker IPC and
+  // shows up as opaque "bus error"/worker-killed crashes under torch.
+  "runArgs": ["--shm-size=8g"],
+
+  "containerEnv": {
+    "PYTHONUNBUFFERED": "1",
+
+    // The base image's NVIDIA_REQUIRE_CUDA label enumerates driver bands, and
+    // the newest it knows is `driver>=590,driver<591`. A host driver outside
+    // every band -- 591.86, say -- satisfies none of them, so nvidia-container-
+    // cli refuses to start the container, reporting the unrelated-looking
+    // `unsatisfied condition: cuda>=13.2, please update your driver`. The driver
+    // is too new here, not too old: it reports CUDA 13.2 (cuDriverGetVersion
+    // 13020) once inside. Skipping the stale check is the documented escape
+    // hatch; the real compatibility floor is enforced by the build-time torch
+    // assertion and by verify_gpus.py at start.
+    "NVIDIA_DISABLE_REQUIRE": "1"
+  },
+
+  // Keeps the Claude Code login and history across container rebuilds.
+  "mounts": [
+    "source=claude-dev-claude-home,target=/home/vscode/.claude,type=volume"
+  ],
+
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "python.defaultInterpreterPath": "/opt/venv/bin/python"
+      },
+      "extensions": [
+        "ms-python.python",
+        "ms-toolsai.jupyter",
+        "esbenp.prettier-vscode",
+        "dbaeumer.vscode-eslint"
+      ]
+    }
+  },
+
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+
+  // No `|| true`: if PyTorch is broken the check should be loud, not silent.
+  // It exits 0 on a healthy CPU-only host and only fails when torch itself is.
+  "postStartCommand": "python .devcontainer/verify_gpus.py",
+
+  "remoteUser": "vscode"
+}
