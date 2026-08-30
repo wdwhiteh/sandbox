@@ -5,6 +5,16 @@ and then uses it to make predictions. You don't need to know how to code or
 know anything about AI to run it and understand what's happening — this guide
 explains every step in plain language.
 
+## Watch this first (optional but recommended)
+
+If neurons, weights, and layers are new to you, spend the ~19 minutes on
+3Blue1Brown's [But what is a neural network?](https://www.3blue1brown.com/lessons/neural-networks)
+before reading further. It's a visual, intuitive walkthrough of the same
+ideas this example builds in code, using handwritten digit recognition as
+its running example instead of the made-up categories used here. The
+sections below call back to it by name wherever a term has a matching
+picture in the video.
+
 ## What this app actually does
 
 The task is **classification**: given a description of something, decide
@@ -36,7 +46,11 @@ and gets better through **training**, described below.
 The model is a small **neural network** — loosely inspired by how brain cells
 pass signals to each other. It's organized into layers: numbers go in one
 side, get transformed step by step, and a set of scores comes out the other
-side.
+side. This mirrors the video's own example: early layers pick up on simple,
+low-level patterns, and later layers combine those into higher-level ones
+(the video's example was edges combining into loops, which combine into
+digits; here it's two hidden layers doing the same kind of combining, just
+on plain numbers instead of pixels).
 
 ```
    INPUT                  HIDDEN LAYER 1            HIDDEN LAYER 2            OUTPUT
@@ -53,14 +67,19 @@ side.
                         [ReLU: drop negatives]     [ReLU: drop negatives]     wins
 ```
 
-- Each **"neuron"** just computes a weighted sum of the numbers coming into it
-  (multiply each input by an adjustable number called a "weight," add them
-  up). This is what the arrows labeled `weights` represent.
+- Each **"neuron"** just computes a weighted sum of the numbers coming into
+  it, plus one more adjustable number called a **bias** (multiply each
+  input by an adjustable number called a "weight," add them up, then add
+  the bias). This is what the arrows labeled `weights` represent. In the
+  video's terms, the number that comes out of a neuron is called its
+  **activation**.
 - **ReLU** is a tiny rule applied after each hidden layer: if a number comes
   out negative, replace it with zero; otherwise leave it alone. Without a
   rule like this, stacking layers would be mathematically the same as having
   just one layer — ReLU is what lets the network learn more complex,
-  non-straight-line patterns.
+  non-straight-line patterns. The video uses an older rule called
+  **sigmoid** for this same spot; ReLU is cheaper to compute and is what
+  most modern networks, including this one, use instead.
 - The **output layer** produces one score per category. The model's
   prediction is simply whichever category got the highest score.
 
@@ -70,9 +89,10 @@ each, `num_classes=4`.
 
 ## What "training" means
 
-When the model is first created, every weight (every number on every arrow
-above) is random, so its guesses are random too. Training is the process of
-nudging those weights to make better guesses:
+When the model is first created, every weight and bias (every number on
+every arrow above, plus each neuron's bias) is random, so its guesses are
+random too. Training is the process of nudging those numbers to make better
+guesses:
 
 1. Show the model a batch of examples it hasn't adjusted to yet.
 2. Compare its guesses to the correct answers, and measure how wrong it was.
@@ -128,6 +148,31 @@ Once training is done, the weights are frozen — no more adjusting. Using the
 trained model to make a prediction on a new example is called **inference**.
 This is the "real" use of the model: everything before this point was just
 preparation.
+
+## Further reading
+
+Everything above is enough to run and understand this example. If you want
+to go a level deeper on any of the ideas, these are well-established,
+stable sources rather than anything specific to this repo:
+
+- [Gradient descent, how neural networks learn](https://www.3blue1brown.com/lessons/gradient-descent)
+  (3Blue1Brown) — chapter 2 of the series recommended at the top of this
+  guide, picking up where chapter 1 left off and covering the same ideas
+  behind [What "training" means](#what-training-means) above, with
+  animations. The [rest of the series](https://www.3blue1brown.com/?topic=neural-networks)
+  continues from there into backpropagation (chapters 3-4).
+- [Gradient descent](https://en.wikipedia.org/wiki/Gradient_descent) (Wikipedia)
+  — the general optimization method behind the "nudge the weights to
+  reduce the loss" step described above.
+- [Overfitting](https://en.wikipedia.org/wiki/Overfitting) (Wikipedia) —
+  the general concept behind the train-vs-validation gap that lessons 2-6
+  in the tutorial series are all, in one way or another, about managing.
+- [Dropout (neural networks)](<https://en.wikipedia.org/wiki/Dropout_(neural_networks)>)
+  (Wikipedia) — the technique introduced in [train4.py](train4.py) /
+  lesson 4.
+- [PyTorch documentation](https://pytorch.org/docs/stable/index.html) —
+  the reference for every PyTorch function used in this example
+  (`nn.Linear`, `nn.Dropout`, `DataLoader`, and so on).
 
 ## Step-by-step: run it yourself
 
