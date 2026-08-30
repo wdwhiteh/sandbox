@@ -1,8 +1,31 @@
 """
-Simple PyTorch example: builds and trains a small neural network on
-synthetic data, automatically using GPU acceleration (CUDA or Apple MPS)
-when available and falling back to CPU otherwise. The trained weights are
-saved to model.pt so infer.py can load them and run inference.
+LESSON 3 of 6: training for longer, and teaching it to stop itself (patience / early stopping).
+
+What's new vs train2.py: two changes, because they're two sides of the same
+problem.
+
+1. We raise num_epochs way up (10 -> 200), to see what happens if we just
+   let training run longer, hoping "more training = a better model."
+2. We add "patience": after every epoch, if val loss is the best we've seen
+   so far, we save a copy of the model's weights. If 15 epochs go by with no
+   new best, we stop training early -- and the file we save at the end is
+   the BEST-seen epoch's weights, not whatever the final epoch happened to
+   produce.
+
+Why: if you look closely at train2.py's own output, val loss actually
+bottoms out around epoch 6 and then starts drifting back up slightly, even
+though train loss keeps falling every single epoch. That gap is called
+OVERFITTING: past a certain point, the model isn't learning the real pattern
+anymore -- it's starting to memorize quirks specific to the training
+examples (including the random noise baked into their labels), which makes
+it worse, not better, at everything else. Change #1 alone (more epochs, no
+early stopping) would make that problem much worse over 200 epochs instead
+of 10. Change #2 (patience) is the fix: it lets training run as long as it's
+actually improving, then stops and keeps the best version -- so you get the
+benefit of "train for a while" without the downside of "then keep going long
+after it stopped helping."
+
+Run it with: python train3.py
 """
 
 import torch
@@ -10,7 +33,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 
-MODEL_PATH = "model.pt"
+MODEL_PATH = "model3.pt"
 
 
 def get_device() -> torch.device:
@@ -25,15 +48,13 @@ def get_device() -> torch.device:
 
 
 class SimpleClassifier(nn.Module):
-    def __init__(self, in_features: int, hidden_features: int, num_classes: int, dropout: float = 0.1):
+    def __init__(self, in_features: int, hidden_features: int, num_classes: int):
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(in_features, hidden_features),
             nn.ReLU(),
-            nn.Dropout(dropout),
             nn.Linear(hidden_features, hidden_features),
             nn.ReLU(),
-            nn.Dropout(dropout),
             nn.Linear(hidden_features, num_classes),
         )
 
@@ -42,14 +63,6 @@ class SimpleClassifier(nn.Module):
 
 
 def make_synthetic_dataset(num_samples: int, in_features: int, num_classes: int, seed: int = 0):
-    """Generates a linearly separable-ish classification dataset.
-
-    The underlying "true" decision boundary (true_weights) always comes from
-    a fixed seed so it stays consistent between train.py and infer.py; only
-    the sampled inputs vary with `seed`, so infer.py can draw fresh, unseen
-    examples that are still labeled by the same ground-truth function the
-    model was trained on.
-    """
     truth_generator = torch.Generator().manual_seed(0)
     true_weights = torch.randn(in_features, num_classes, generator=truth_generator)
 
@@ -60,14 +73,12 @@ def make_synthetic_dataset(num_samples: int, in_features: int, num_classes: int,
     return X, y
 
 
-def train(model, device, train_loader, optimizer, criterion, noise_std: float = 0.0):
+def train_one_epoch(model, device, train_loader, optimizer, criterion):
     model.train()
     total_loss = 0.0
     correct = 0
     for X_batch, y_batch in train_loader:
         X_batch, y_batch = X_batch.to(device), y_batch.to(device)
-        if noise_std > 0:
-            X_batch = X_batch + noise_std * torch.randn_like(X_batch)
 
         optimizer.zero_grad()
         outputs = model(X_batch)
@@ -100,6 +111,22 @@ def evaluate(model, device, data_loader, criterion):
     return avg_loss, accuracy
 
 
+@torch.no_grad()
+def demo_inference(model, device, in_features, num_classes):
+    model.eval()
+    X, y = make_synthetic_dataset(num_samples=20, in_features=in_features, num_classes=num_classes, seed=1)
+    X = X.to(device)
+    predictions = model(X).argmax(dim=1)
+
+    print("\nInference on 20 unseen examples:")
+    hits = 0
+    for i, (pred, actual) in enumerate(zip(predictions.tolist(), y.tolist())):
+        ok = pred == actual
+        hits += ok
+        print(f"  sample {i}: predicted={pred} actual={actual} [{'OK' if ok else 'MISS'}]")
+    print(f"  {hits}/20 correct (accuracy: {hits / 20:.1%})")
+
+
 def main():
     device = get_device()
     print(f"Using device: {device}")
@@ -107,17 +134,19 @@ def main():
     in_features = 20
     num_classes = 4
     hidden_features = 64
-    num_epochs = 500
-    batch_size = 128
-    learning_rate = 5e-5
-    # Gaussian noise added to inputs during training only, so the model
-    # learns to rely on the overall pattern rather than exact input values —
-    # this makes it more robust to noisy inputs at inference time, at the
-    # cost of slightly slower convergence and slightly lower clean-data
-    # accuracy.
-    noise_std = 0.1
-    # Stop once val loss hasn't improved for this many epochs in a row.
-    patience = int(0.1 * num_epochs)
+
+    batch_size = 64
+    learning_rate = 1e-3
+    # ------------------------------------------------------------------
+    # NEW IN THIS LESSON, part 1: a much higher epoch ceiling. This is not
+    # a promise we'll actually train this long -- it's an upper bound, in
+    # case the model is still improving. Patience (below) decides when to
+    # actually stop.
+    # ------------------------------------------------------------------
+    num_epochs = 200
+    # NEW IN THIS LESSON, part 2: stop once val loss hasn't set a new best
+    # for this many epochs in a row.
+    patience = 15
 
     X, y = make_synthetic_dataset(num_samples=5000, in_features=in_features, num_classes=num_classes)
     split = int(0.8 * len(X))
@@ -137,13 +166,18 @@ def main():
     epochs_without_improvement = 0
 
     for epoch in range(1, num_epochs + 1):
-        train_loss, train_acc = train(model, device, train_loader, optimizer, criterion, noise_std=noise_std)
+        train_loss, train_acc = train_one_epoch(model, device, train_loader, optimizer, criterion)
         val_loss, val_acc = evaluate(model, device, val_loader, criterion)
         print(
             f"Epoch {epoch:3d} | train loss: {train_loss:.4f} acc: {train_acc:.2%} "
             f"| val loss: {val_loss:.4f} acc: {val_acc:.2%}"
         )
 
+        # ------------------------------------------------------------------
+        # NEW IN THIS LESSON: remember the best-so-far weights, and count how
+        # many epochs it's been since we last improved. Once that count hits
+        # `patience`, stop -- further training is more likely to hurt than help.
+        # ------------------------------------------------------------------
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             best_epoch = epoch
@@ -158,6 +192,8 @@ def main():
                 )
                 break
 
+    # Save the BEST epoch's weights, not the final epoch's -- that's the
+    # whole point of tracking best_state above.
     torch.save(
         {
             "model_state": best_state,
@@ -168,6 +204,9 @@ def main():
         MODEL_PATH,
     )
     print(f"Saved model from epoch {best_epoch} (val loss {best_val_loss:.4f}) to {MODEL_PATH}")
+
+    model.load_state_dict(best_state)
+    demo_inference(model, device, in_features, num_classes)
 
 
 if __name__ == "__main__":

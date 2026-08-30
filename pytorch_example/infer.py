@@ -25,7 +25,7 @@ def main():
     # draws different samples than train.py's seed=0 training/eval split,
     # while still using the same ground-truth labeling function).
     X, y = make_synthetic_dataset(
-        num_samples=8,
+        num_samples=100,
         in_features=checkpoint["in_features"],
         num_classes=checkpoint["num_classes"],
         seed=1,
@@ -36,9 +36,14 @@ def main():
         logits = model(X)
         predictions = logits.argmax(dim=1)
 
+    hits = 0
     for i, (pred, actual) in enumerate(zip(predictions.tolist(), y.tolist())):
         marker = "OK" if pred == actual else "MISS"
+        ok = pred == actual
+        hits += ok
         print(f"sample {i}: predicted={pred} actual={actual} [{marker}]")
+        
+    print(f"  {hits}/100 correct (accuracy: {hits / 100:.1%})")
 
 
 if __name__ == "__main__":
