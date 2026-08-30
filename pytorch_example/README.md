@@ -23,12 +23,12 @@ and gets better through **training**, described below.
 - [train.py](train.py) / [infer.py](infer.py) — the finished, fully-tuned
   version of this example. Start here if you just want to run something and
   see it work (steps below).
-- [train1.py](train1.py) through [train6.py](train6.py) — a 6-lesson,
+- [train1.py](train1.py) through [train7.py](train7.py) — a 7-lesson,
   self-contained tutorial series that starts from a naive, untuned version
   and adds exactly one new idea per file, ending up at roughly the same
   place as `train.py`. Start here if you want to understand *why* `train.py`
   is built the way it is, one change at a time. See
-  [Learn by experimenting](#learn-by-experimenting-a-6-lesson-training-walkthrough)
+  [Learn by experimenting](#learn-by-experimenting-a-7-lesson-training-walkthrough)
   below.
 
 ## The model, illustrated
@@ -225,10 +225,10 @@ was generated, so even a well-trained model won't hit 100%. This is the same
 "load a saved model and ask it about new data" pattern used for real models
 on real data.
 
-## Learn by experimenting: a 6-lesson training walkthrough
+## Learn by experimenting: a 7-lesson training walkthrough
 
 `train.py` is the finished product. This section walks through
-**[train1.py](train1.py) → [train6.py](train6.py)**, six small,
+**[train1.py](train1.py) → [train7.py](train7.py)**, seven small,
 self-contained scripts that rebuild it from scratch, one idea at a time.
 Every lesson file is fully runnable on its own (`python train3.py`, etc.)
 and saves to its own checkpoint (`model3.pt`, etc.) so running one doesn't
@@ -257,6 +257,8 @@ expect, that's called out honestly below rather than smoothed over.
 | 4 — + dropout | 64 | 1e-3 | 0.1 | 15 | none | 0.1644 / 93.50% (epoch 20 of 35) | 18/20 (90.0%) |
 | 5 — + tuned batch/LR | 32 | 1e-4 | 0.1 | 15 | none | 0.1468 / 94.20% (epoch 109 of 124) | 18/20 (90.0%) |
 | 6 — + input noise | 32 | 1e-4 | 0.1 | 15 | 0.1 | 0.1707 / 92.90% (epoch 100 of 115) | 17/20 (85.0%) |
+| 7 — CPU vs. GPU, batch 32 *(fixed 30 epochs, no patience — see below)* | 32 | 1e-4 | 0.1 | none | 0.1 | 0.2199 / 92.40% (CPU) · 0.2224 / 92.00% (GPU) | 90.0% (CPU) · 95.0% (GPU) |
+| 7 — CPU vs. GPU, batch 2048 *(same lesson, larger batch + scaled-up LR — see below)* | 2048 | 8e-3 | 0.1 | none | 0.1 | 0.1851 / 92.10% (CPU) · 0.1833 / 92.50% (GPU) | 90.0% (CPU) · 90.0% (GPU) |
 
 ### Lesson 1: the naive baseline
 
@@ -421,3 +423,88 @@ That's the real lesson: a technique sounding reasonable, or even being
 data. The only way to know is to measure it, exactly like this — twice, if
 the first result surprises you — not to assume it worked because the idea
 makes sense.
+
+### Lesson 7 (bonus): CPU vs. GPU — does the GPU actually help here?
+
+**What's new:** this lesson trains the exact same model twice per round,
+once forced onto the CPU and once on the GPU, using the same starting
+weights and the same batch order for both (so any difference in the numbers
+is real device behavior, not random luck), timing every epoch on both.
+Unlike lessons 3-6, there's no early stopping here — within a round, CPU
+and GPU always train for the same fixed 30 epochs, so the *timing*
+comparison is apples-to-apples rather than one run stopping earlier than
+the other.
+
+It then does that TWICE — once with a **small batch size (32)**, same as
+every earlier lesson, and again with a **large batch size (2048)** — because
+batch size turns out to be the whole story on speed. But raising the batch
+size 64x also means 64x fewer weight-update steps per epoch (2 vs. 125),
+so round 2 also raises `learning_rate` from 1e-4 to 8e-3 to compensate —
+the same batch-size/learning-rate coupling lesson 5 introduced, applied
+here so round 2 trains a model actually worth comparing, not just a fast
+but broken one. That value wasn't guessed: a handful of learning rates were
+tried at batch size 2048 and checked against validation accuracy, exactly
+the "measure, don't guess" approach the rest of this series uses.
+
+**Round 1 (batch size 32, learning rate 1e-4):**
+
+| metric | CPU | GPU |
+| --- | --- | --- |
+| total time (30 epochs) | 3.00 s | 6.45 s |
+| avg time per epoch (after warm-up) | 90.9 ms | 203.5 ms |
+| final val loss / acc | 0.2199 / 92.40% | 0.2224 / 92.00% |
+| inference accuracy (20 samples) | 90.0% | 95.0% |
+
+CPU was **2.24x faster per epoch** than the GPU. Every batch sent to the GPU
+has to be copied over from system memory, and every operation pays a small,
+fixed cost just to launch on the GPU, before any actual computation
+happens. With only 32 tiny examples per batch, that fixed overhead is
+bigger than the real work — the GPU spends most of its time waiting, not
+calculating.
+
+**Round 2 (batch size 2048, learning rate 8e-3):**
+
+| metric | CPU | GPU |
+| --- | --- | --- |
+| total time (30 epochs) | 1.03 s | 0.64 s |
+| avg time per epoch (after warm-up) | 33.7 ms | 21.3 ms |
+| final val loss / acc | 0.1851 / 92.10% | 0.1833 / 92.50% |
+| inference accuracy (20 samples) | 90.0% | 90.0% |
+
+This time the **GPU was 1.58x faster per epoch** — the crossover actually
+happened — and, with the learning rate scaled to match, round 2's model is
+genuinely competitive with round 1's (92.1-92.5% val accuracy vs.
+92.0-92.4%), not just fast. With 2048 examples bundled into each batch,
+there's finally enough parallel work per batch that the GPU's fixed
+per-batch overhead is worth paying, and its ability to crunch through
+thousands of examples at once starts to win out over the CPU doing the
+same work more sequentially.
+
+(For comparison, the first version of this lesson left `learning_rate` at
+1e-4 for round 2 too. With 64x fewer weight-update steps and no larger
+steps to compensate, that version's round 2 only reached 35-36% validation
+accuracy — a broken-looking result that had nothing to do with CPU vs. GPU
+and everything to do with an untuned learning rate. Fixing that, rather
+than just footnoting it away, is what turned this into a fair comparison.)
+
+**Takeaway:** a GPU's advantage comes from doing enormous numbers of
+calculations in parallel, which only pays off once there's enough work per
+batch to fill that parallelism — and getting real benefit from a larger
+batch size takes a matching learning rate, not just the batch size change
+on its own. Same model, same data, same code — what changed between the two
+rounds was the batch size and, deliberately, the learning rate that goes
+with it, and that combination was enough to flip which device won while
+keeping both rounds' models genuinely comparable. This is exactly why this
+whole tutorial series has used `get_device()` to automatically pick "the
+best available" hardware rather than hard-coding GPU-or-nothing: "best"
+genuinely depends on the size of the job, and the only way to know which
+one is faster for *your* model is what this lesson just did — measure it
+directly, the same way lesson 6 measured (and didn't just assume) whether
+noise injection helped.
+
+Try it yourself with `python train7.py`. The two batch sizes and learning
+rates are set at the top of `main()` in [train7.py](train7.py)
+(`small_batch_size`/`small_learning_rate` and
+`large_batch_size`/`large_learning_rate`) — try other values, or change
+`hidden_features` too, to see where the crossover point falls on your own
+machine.

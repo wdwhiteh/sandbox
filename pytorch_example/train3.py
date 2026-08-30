@@ -1,5 +1,5 @@
 """
-LESSON 3 of 6: training for longer, and teaching it to stop itself (patience / early stopping).
+LESSON 3 of 7: training for longer, and teaching it to stop itself (patience / early stopping).
 
 What's new vs train2.py: two changes, because they're two sides of the same
 problem.
