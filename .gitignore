@@ -217,5 +217,5 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# Trained model checkpoints produced by the example app
-pytorch_example/model.pt
+# Trained model checkpoints produced by the example app and its tutorial lessons
+pytorch_example/model*.pt
