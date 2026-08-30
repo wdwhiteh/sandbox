@@ -1,5 +1,5 @@
 """
-LESSON 4 of 6: dropout layers.
+LESSON 4 of 7: dropout layers.
 
 What's new vs train3.py: two `nn.Dropout` layers added to the model itself,
 right after each hidden layer's activation. Everything about *how* we train

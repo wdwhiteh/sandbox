@@ -1,5 +1,5 @@
 """
-LESSON 6 of 6 (bonus): input noise injection, for robustness to noisy inputs.
+LESSON 6 of 7 (bonus): input noise injection, for robustness to noisy inputs.
 
 This lesson isn't from the original list of four concepts -- it's an extra
 one, because it addresses a different question than the others. Lessons

@@ -1,11 +1,11 @@
 """
-LESSON 1 of 6: the plain, "just get it working" baseline.
+LESSON 1 of 7: the plain, "just get it working" baseline.
 
 This is the simplest version of the training script: pick some settings,
 train for a fixed number of passes over the data, and check the result once
 at the end. It has no safety nets — nothing here watches for the model
 "cheating" by memorizing the training data instead of actually learning.
-The next five lessons (train2.py -> train6.py) each add ONE new idea on top
+The next six lessons (train2.py -> train7.py) each add ONE new idea on top
 of this file to fix that, and pytorch_example/README.md explains what
 changes and why after every step.
 

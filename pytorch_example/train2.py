@@ -1,5 +1,5 @@
 """
-LESSON 2 of 6: checking a "practice test" every epoch (validation loss/accuracy).
+LESSON 2 of 7: checking a "practice test" every epoch (validation loss/accuracy).
 
 What's new vs train1.py: train1.py only checked the held-out data once, at
 the very end, after training was already finished. That's too late to be

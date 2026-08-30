@@ -1,5 +1,5 @@
 """
-LESSON 5 of 6: hyperparameter tuning (batch size and learning rate).
+LESSON 5 of 7: hyperparameter tuning (batch size and learning rate).
 
 What's new vs train4.py: two of the "knobs" we've been leaving alone since
 train1.py are changed:
